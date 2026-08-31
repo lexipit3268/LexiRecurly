@@ -1,4 +1,3 @@
-import "@/global.css";
 import { Href, Link } from "expo-router";
 import { styled } from "nativewind";
 import { Text } from "react-native";

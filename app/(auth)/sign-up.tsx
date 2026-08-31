@@ -13,7 +13,7 @@ const SignUp = () => {
         Go home
       </Link>
       <Link
-        href={"/sign-up"}
+        href={"/sign-in"}
         className="px-6 max-w-fit py-4 rounded-md bg-slate-700 text-white"
       >
         Go to SignIn
