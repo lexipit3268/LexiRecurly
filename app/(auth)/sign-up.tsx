@@ -1,6 +1,7 @@
 import { useSignUp } from "@clerk/expo";
 import { Ionicons } from "@expo/vector-icons";
-import { Link } from "expo-router";
+import { clsx } from "clsx";
+import { Link, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -53,8 +54,7 @@ function passwordStrength(pw: string): { label: string; color: string } {
   if (pw.length === 0) return { label: "", color: "transparent" };
   if (pw.length < 8) return { label: "Too short", color: "#dc2626" };
   const has = (re: RegExp) => re.test(pw);
-  const score =
-    [/[A-Z]/, /[a-z]/, /[0-9]/, /[^A-Za-z0-9]/].filter(has).length;
+  const score = [/[A-Z]/, /[a-z]/, /[0-9]/, /[^A-Za-z0-9]/].filter(has).length;
   if (score <= 2) return { label: "Weak", color: "#f97316" };
   if (score === 3) return { label: "Good", color: "#eab308" };
   return { label: "Strong", color: "#16a34a" };
@@ -83,6 +83,7 @@ function BrandHeader() {
 type Phase = "register" | "verify";
 
 export default function SignUp() {
+  const router = useRouter();
   const { signUp, fetchStatus } = useSignUp();
 
   // ── Phase 1 — Registration ────────────────────────────────────────────────
@@ -204,7 +205,14 @@ export default function SignUp() {
 
     startResendCountdown();
     setPhase("verify");
-  }, [signUp, firstName, email, password, validateRegistration, startResendCountdown]);
+  }, [
+    signUp,
+    firstName,
+    email,
+    password,
+    validateRegistration,
+    startResendCountdown,
+  ]);
 
   // ── Submit — Phase 2 ─────────────────────────────────────────────────────
 
@@ -227,17 +235,15 @@ export default function SignUp() {
       return;
     }
 
-    if (signUp.status === "complete") {
-      const { error: finalizeError } = await signUp.finalize();
-      if (finalizeError) {
-        setApiError(mapClerkError(finalizeError));
-      }
-    } else {
-      setApiError(
-        "Verification incomplete. Please check your email and try again.",
-      );
+    // verifyEmailCode succeeded — finalize to activate the session
+    const { error: finalizeError } = await signUp.finalize();
+    if (finalizeError && finalizeError.code !== "session_exists") {
+      setApiError(mapClerkError(finalizeError));
+      return;
     }
-  }, [signUp, code]);
+    // session_exists = session auto-activated — treat as success
+    router.replace("/(tabs)" as any);
+  }, [signUp, code, router]);
 
   // ── Resend code ───────────────────────────────────────────────────────────
 
@@ -259,7 +265,10 @@ export default function SignUp() {
 
   if (phase === "verify") {
     return (
-      <SafeAreaView className="auth-safe-area" style={{ flex: 1, backgroundColor: '#fff9e3' }}>
+      <SafeAreaView
+        className="auth-safe-area"
+        style={{ flex: 1, backgroundColor: "#fff9e3" }}
+      >
         <KeyboardAvoidingView
           className="flex-1"
           behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -286,7 +295,8 @@ export default function SignUp() {
                   <View className="auth-field">
                     <Text className="auth-label">Verification code</Text>
                     <TextInput
-                      className={`auth-input text-center text-2xl tracking-[12px] ${codeError ? "auth-input-error" : ""}`}
+                      className={clsx("auth-input", codeError && "auth-input-error")}
+                      style={{ letterSpacing: 12, fontSize: 24, textAlign: "center" }}
                       placeholder="______"
                       placeholderTextColor="rgba(0,0,0,0.25)"
                       keyboardType="number-pad"
@@ -301,7 +311,9 @@ export default function SignUp() {
                       textAlign="center"
                     />
                     {!!codeError && (
-                      <Text className="auth-error text-center">{codeError}</Text>
+                      <Text className="auth-error text-center">
+                        {codeError}
+                      </Text>
                     )}
                   </View>
 
@@ -314,7 +326,10 @@ export default function SignUp() {
 
                   {/* CTA */}
                   <Pressable
-                    className={`auth-button ${isDisabled ? "auth-button-disabled" : ""}`}
+                    className={clsx(
+                      "auth-button",
+                      isDisabled && "auth-button-disabled",
+                    )}
                     onPress={handleVerify}
                     disabled={isDisabled}
                   >
@@ -333,7 +348,10 @@ export default function SignUp() {
                     hitSlop={8}
                   >
                     <Text
-                      className={`auth-helper ${resendCountdown > 0 ? "opacity-40" : ""}`}
+                      className={clsx(
+                        "auth-helper",
+                        resendCountdown > 0 && "opacity-40",
+                      )}
                     >
                       {resendCountdown > 0
                         ? `Resend code in ${resendCountdown}s`
@@ -368,7 +386,10 @@ export default function SignUp() {
   // ── Render — Phase 1 (Register) ───────────────────────────────────────────
 
   return (
-    <SafeAreaView className="auth-safe-area" style={{ flex: 1, backgroundColor: '#fff9e3' }}>
+    <SafeAreaView
+      className="auth-safe-area"
+      style={{ flex: 1, backgroundColor: "#fff9e3" }}
+    >
       <KeyboardAvoidingView
         className="flex-1"
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -394,7 +415,10 @@ export default function SignUp() {
                 <View className="auth-field">
                   <Text className="auth-label">First name</Text>
                   <TextInput
-                    className={`auth-input ${firstNameError ? "auth-input-error" : ""}`}
+                    className={clsx(
+                      "auth-input",
+                      firstNameError && "auth-input-error",
+                    )}
                     placeholder="Your first name"
                     placeholderTextColor="rgba(0,0,0,0.35)"
                     autoCapitalize="words"
@@ -417,7 +441,10 @@ export default function SignUp() {
                 <View className="auth-field">
                   <Text className="auth-label">Email</Text>
                   <TextInput
-                    className={`auth-input ${emailError ? "auth-input-error" : ""}`}
+                    className={clsx(
+                      "auth-input",
+                      emailError && "auth-input-error",
+                    )}
                     placeholder="you@example.com"
                     placeholderTextColor="rgba(0,0,0,0.35)"
                     autoCapitalize="none"
@@ -443,7 +470,10 @@ export default function SignUp() {
                   <Text className="auth-label">Password</Text>
                   <View className="relative">
                     <TextInput
-                      className={`auth-input pr-12 ${passwordError ? "auth-input-error" : ""}`}
+                      className={clsx(
+                        "auth-input pr-12",
+                        passwordError && "auth-input-error",
+                      )}
                       placeholder="Minimum 8 characters"
                       placeholderTextColor="rgba(0,0,0,0.35)"
                       secureTextEntry={!showPassword}
@@ -506,7 +536,10 @@ export default function SignUp() {
                   <Text className="auth-label">Confirm password</Text>
                   <View className="relative">
                     <TextInput
-                      className={`auth-input pr-12 ${confirmPasswordError ? "auth-input-error" : ""}`}
+                      className={clsx(
+                        "auth-input pr-12",
+                        confirmPasswordError && "auth-input-error",
+                      )}
                       placeholder="Re-enter your password"
                       placeholderTextColor="rgba(0,0,0,0.35)"
                       secureTextEntry={!showConfirmPassword}
@@ -549,7 +582,10 @@ export default function SignUp() {
 
                 {/* CTA */}
                 <Pressable
-                  className={`auth-button ${isDisabled ? "auth-button-disabled" : ""}`}
+                  className={clsx(
+                    "auth-button",
+                    isDisabled && "auth-button-disabled",
+                  )}
                   onPress={handleRegister}
                   disabled={isDisabled}
                 >
@@ -576,7 +612,7 @@ export default function SignUp() {
             </View>
 
             {/* Terms micro-copy */}
-            <Text className="mt-4 px-4 text-center text-[11px] font-sans-medium text-muted-foreground">
+            <Text className="mt-4 px-4 text-center text-xs font-sans-medium text-muted-foreground">
               By creating an account you agree to our{" "}
               <Text className="font-sans-semibold text-primary">
                 Terms of Service

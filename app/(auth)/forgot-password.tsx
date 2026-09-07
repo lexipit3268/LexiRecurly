@@ -1,5 +1,6 @@
 import { useSignIn } from "@clerk/expo";
 import { Ionicons } from "@expo/vector-icons";
+import { clsx } from "clsx";
 import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
@@ -132,11 +133,12 @@ export default function ForgotPassword() {
 
     if (signIn.status === "complete") {
       const { error: finalizeError } = await signIn.finalize();
-      if (finalizeError) {
+      if (finalizeError && finalizeError.code !== "session_exists") {
         setApiError(mapClerkError(finalizeError));
-      } else {
-        setPhase("done");
+        return;
       }
+      // session_exists = session auto-activated — treat as success
+      setPhase("done");
     } else {
       setPhase("done");
     }
@@ -146,7 +148,10 @@ export default function ForgotPassword() {
 
   if (phase === "done") {
     return (
-      <SafeAreaView className="auth-safe-area" style={{ flex: 1, backgroundColor: '#fff9e3' }}>
+      <SafeAreaView
+        className="auth-safe-area"
+        style={{ flex: 1, backgroundColor: "#fff9e3" }}
+      >
         <View className="auth-content flex-1 items-center justify-center">
           <View className="mb-6 size-20 items-center justify-center rounded-full bg-success/15">
             <Ionicons name="checkmark-circle" size={48} color="#16a34a" />
@@ -170,7 +175,10 @@ export default function ForgotPassword() {
 
   if (phase === "reset") {
     return (
-      <SafeAreaView className="auth-safe-area" style={{ flex: 1, backgroundColor: '#fff9e3' }}>
+      <SafeAreaView
+        className="auth-safe-area"
+        style={{ flex: 1, backgroundColor: "#fff9e3" }}
+      >
         <KeyboardAvoidingView
           className="flex-1"
           behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -205,7 +213,8 @@ export default function ForgotPassword() {
                   <View className="auth-field">
                     <Text className="auth-label">Reset code</Text>
                     <TextInput
-                      className={`auth-input text-center text-2xl tracking-[12px] ${codeError ? "auth-input-error" : ""}`}
+                      className={clsx("auth-input", codeError && "auth-input-error")}
+                      style={{ letterSpacing: 12, fontSize: 24, textAlign: "center" }}
                       placeholder="______"
                       placeholderTextColor="rgba(0,0,0,0.25)"
                       keyboardType="number-pad"
@@ -231,7 +240,10 @@ export default function ForgotPassword() {
                     <Text className="auth-label">New password</Text>
                     <View className="relative">
                       <TextInput
-                        className={`auth-input pr-12 ${passwordError ? "auth-input-error" : ""}`}
+                        className={clsx(
+                          "auth-input pr-12",
+                          passwordError && "auth-input-error",
+                        )}
                         placeholder="Minimum 8 characters"
                         placeholderTextColor="rgba(0,0,0,0.35)"
                         secureTextEntry={!showPassword}
@@ -269,7 +281,10 @@ export default function ForgotPassword() {
                   )}
 
                   <Pressable
-                    className={`auth-button ${isDisabled ? "auth-button-disabled" : ""}`}
+                    className={clsx(
+                      "auth-button",
+                      isDisabled && "auth-button-disabled",
+                    )}
                     onPress={handleReset}
                     disabled={isDisabled}
                   >
@@ -291,7 +306,10 @@ export default function ForgotPassword() {
   // ── Render: Request form (step 1) ──────────────────────────────────────────
 
   return (
-    <SafeAreaView className="auth-safe-area" style={{ flex: 1, backgroundColor: '#fff9e3' }}>
+    <SafeAreaView
+      className="auth-safe-area"
+      style={{ flex: 1, backgroundColor: "#fff9e3" }}
+    >
       <KeyboardAvoidingView
         className="flex-1"
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -323,7 +341,10 @@ export default function ForgotPassword() {
                 <View className="auth-field">
                   <Text className="auth-label">Email</Text>
                   <TextInput
-                    className={`auth-input ${emailError ? "auth-input-error" : ""}`}
+                    className={clsx(
+                      "auth-input",
+                      emailError && "auth-input-error",
+                    )}
                     placeholder="you@example.com"
                     placeholderTextColor="rgba(0,0,0,0.35)"
                     autoCapitalize="none"
@@ -351,7 +372,10 @@ export default function ForgotPassword() {
                 )}
 
                 <Pressable
-                  className={`auth-button ${isDisabled ? "auth-button-disabled" : ""}`}
+                  className={clsx(
+                    "auth-button",
+                    isDisabled && "auth-button-disabled",
+                  )}
                   onPress={handleRequest}
                   disabled={isDisabled}
                 >
