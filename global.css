@@ -227,6 +227,94 @@
     @apply py-4 text-sm font-sans-medium text-black/60;
   }
 
+  .home-avatar-fallback {
+    @apply items-center justify-center bg-accent;
+  }
+
+  .home-avatar-fallback-text {
+    @apply text-xl font-sans-extrabold text-background;
+  }
+
+  .settings-header {
+    @apply mb-6;
+  }
+
+  .settings-title {
+    @apply text-3xl font-sans-bold text-primary;
+  }
+
+  .settings-profile-card {
+    @apply flex-row items-center gap-4 rounded-3xl border border-border bg-card p-5;
+  }
+
+  .settings-avatar {
+    @apply size-16 rounded-full;
+  }
+
+  .settings-avatar-fallback {
+    @apply size-16 items-center justify-center rounded-full bg-accent;
+  }
+
+  .settings-avatar-fallback-text {
+    @apply text-2xl font-sans-extrabold text-background;
+  }
+
+  .settings-profile-copy {
+    @apply min-w-0 flex-1;
+  }
+
+  .settings-profile-name {
+    @apply text-xl font-sans-bold text-primary;
+  }
+
+  .settings-profile-email {
+    @apply mt-0.5 text-sm font-sans-medium text-muted-foreground;
+  }
+
+  .settings-section {
+    @apply mt-6 gap-3;
+  }
+
+  .settings-section-title {
+    @apply px-1 text-xs font-sans-semibold uppercase tracking-[1px] text-muted-foreground;
+  }
+
+  .settings-info-card {
+    @apply gap-1 rounded-3xl border border-border bg-card p-2;
+  }
+
+  .settings-info-row {
+    @apply flex-row items-center gap-3 rounded-2xl px-3 py-3;
+  }
+
+  .settings-info-icon {
+    @apply size-10 items-center justify-center rounded-full bg-background;
+  }
+
+  .settings-info-copy {
+    @apply min-w-0 flex-1;
+  }
+
+  .settings-info-label {
+    @apply text-xs font-sans-semibold text-muted-foreground;
+  }
+
+  .settings-info-value {
+    @apply mt-0.5 text-base font-sans-bold text-primary;
+  }
+
+  .settings-signout-button {
+    @apply mt-2 flex-row items-center justify-center gap-2 rounded-2xl border border-destructive/30 bg-destructive/10 py-4;
+  }
+
+  .settings-signout-button-disabled {
+    @apply opacity-50;
+  }
+
+  .settings-signout-text {
+    @apply text-base font-sans-bold text-destructive;
+  }
+
   .auth-safe-area {
     @apply flex-1 bg-background;
   }

@@ -77,10 +77,18 @@ export default function ForgotPassword() {
     }
     setEmailError("");
 
+    // A sign-in attempt must exist (with an identifier) before a reset code
+    // can be requested — create one first.
+    const { error: createError } = await signIn.create({
+      identifier: email.trim().toLowerCase(),
+    });
+    if (createError) {
+      setApiError(mapClerkError(createError));
+      return;
+    }
+
     const { error } = await signIn.resetPasswordEmailCode.sendCode();
     if (error) {
-      // If no sign-in exists yet, create one first with the identifier
-      // The new v4 API requires signIn to have an identifier first
       setApiError(mapClerkError(error));
       return;
     }

@@ -137,7 +137,7 @@ export default function SignIn() {
     }
 
     if (signIn.status === "complete") {
-      // No OTP required — finalize and navigate
+      // No further verification required — finalize and navigate
       const { error: finalizeError } = await signIn.finalize();
       if (finalizeError && finalizeError.code !== "session_exists") {
         setApiError(mapClerkError(finalizeError));
@@ -145,16 +145,39 @@ export default function SignIn() {
       }
       // session_exists is treated as success (session already active)
       router.replace("/(tabs)" as any);
-    } else {
-      // Clerk requires email code — move to OTP phase
-      // (code is auto-sent when password step succeeds)
+      return;
+    }
+
+    if (signIn.status === "needs_second_factor") {
+      const supportsEmailCode = signIn.supportedSecondFactors?.some(
+        (factor) => factor.strategy === "email_code",
+      );
+      if (!supportsEmailCode) {
+        setApiError(
+          "This account requires a verification method that isn't supported here yet.",
+        );
+        return;
+      }
+
+      // Second-factor email codes are not sent automatically — request one explicitly
+      const { error: sendError } = await signIn.mfa.sendEmailCode();
+      if (sendError) {
+        setApiError(mapClerkError(sendError));
+        return;
+      }
+
       setCode("");
       setCodeError("");
       setPhase("otp");
+      return;
     }
+
+    setApiError(
+      "This account requires a verification method that isn't supported here yet.",
+    );
   }, [signIn, email, password, validateFields, router]);
 
-  // ── Submit Phase 2 — email code ───────────────────────────────────────────
+  // ── Submit Phase 2 — email code (second factor) ──────────────────────────
 
   const handleVerifyCode = useCallback(async () => {
     if (!signIn) return;
@@ -166,7 +189,7 @@ export default function SignIn() {
     }
     setCodeError("");
 
-    const { error } = await signIn.emailCode.verifyCode({
+    const { error } = await signIn.mfa.verifyEmailCode({
       code: code.trim(),
     });
 
@@ -175,7 +198,7 @@ export default function SignIn() {
       return;
     }
 
-    // verifyCode succeeded — finalize to activate the session
+    // verifyEmailCode succeeded — finalize to activate the session
     const { error: finalizeError } = await signIn.finalize();
     if (finalizeError && finalizeError.code !== "session_exists") {
       // session_exists means session was auto-activated by verifyCode — treat as success
@@ -191,9 +214,9 @@ export default function SignIn() {
     if (!signIn || isLoading) return;
     setApiError("");
     setCodeError("");
-    const { error } = await signIn.emailCode.sendCode({ emailAddress: email.trim().toLowerCase() });
+    const { error } = await signIn.mfa.sendEmailCode();
     if (error) setApiError(mapClerkError(error));
-  }, [signIn, email, isLoading]);
+  }, [signIn, isLoading]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // ── Render — Phase 2 (OTP) ────────────────────────────────────────────────
