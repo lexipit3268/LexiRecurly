@@ -1,7 +1,7 @@
 import { useSignIn } from "@clerk/expo";
 import { Ionicons } from "@expo/vector-icons";
 import { clsx } from "clsx";
-import { useRouter } from "expo-router";
+import { Href, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
@@ -27,15 +27,21 @@ interface ClerkError {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-function mapClerkError(err: ClerkError | null): string {
-  if (!err) return "Something went wrong. Please try again.";
-  switch (err.code) {
+function mapClerkError(err: unknown): string {
+  if (err instanceof Error)
+    return err.message || "Something went wrong. Please try again.";
+  if (!err || typeof err !== "object")
+    return "Something went wrong. Please try again.";
+  const clerkError = err as ClerkError;
+  switch (clerkError.code) {
     case "form_identifier_not_found":
       return "No account found with this email address.";
     case "too_many_requests":
       return "Too many attempts. Please wait a moment.";
     default:
-      return err.longMessage ?? err.message ?? "Something went wrong.";
+      return (
+        clerkError.longMessage ?? clerkError.message ?? "Something went wrong."
+      );
   }
 }
 
@@ -77,23 +83,27 @@ export default function ForgotPassword() {
     }
     setEmailError("");
 
-    // A sign-in attempt must exist (with an identifier) before a reset code
-    // can be requested — create one first.
-    const { error: createError } = await signIn.create({
-      identifier: email.trim().toLowerCase(),
-    });
-    if (createError) {
-      setApiError(mapClerkError(createError));
-      return;
-    }
+    try {
+      // A sign-in attempt must exist (with an identifier) before a reset code
+      // can be requested — create one first.
+      const { error: createError } = await signIn.create({
+        identifier: email.trim().toLowerCase(),
+      });
+      if (createError) {
+        setApiError(mapClerkError(createError));
+        return;
+      }
 
-    const { error } = await signIn.resetPasswordEmailCode.sendCode();
-    if (error) {
+      const { error } = await signIn.resetPasswordEmailCode.sendCode();
+      if (error) {
+        setApiError(mapClerkError(error));
+        return;
+      }
+
+      setPhase("reset");
+    } catch (error) {
       setApiError(mapClerkError(error));
-      return;
     }
-
-    setPhase("reset");
   }, [signIn, email]);
 
   // ── Step 2: Verify code + set new password ─────────────────────────────────
@@ -119,36 +129,40 @@ export default function ForgotPassword() {
 
     if (!valid) return;
 
-    const { error: verifyError } =
-      await signIn.resetPasswordEmailCode.verifyCode({
-        code: code.trim(),
-      });
+    try {
+      const { error: verifyError } =
+        await signIn.resetPasswordEmailCode.verifyCode({
+          code: code.trim(),
+        });
 
-    if (verifyError) {
-      setApiError(mapClerkError(verifyError));
-      return;
-    }
-
-    const { error: submitError } =
-      await signIn.resetPasswordEmailCode.submitPassword({
-        password: newPassword,
-      });
-
-    if (submitError) {
-      setApiError(mapClerkError(submitError));
-      return;
-    }
-
-    if (signIn.status === "complete") {
-      const { error: finalizeError } = await signIn.finalize();
-      if (finalizeError && finalizeError.code !== "session_exists") {
-        setApiError(mapClerkError(finalizeError));
+      if (verifyError) {
+        setApiError(mapClerkError(verifyError));
         return;
       }
-      // session_exists = session auto-activated — treat as success
-      setPhase("done");
-    } else {
-      setPhase("done");
+
+      const { error: submitError } =
+        await signIn.resetPasswordEmailCode.submitPassword({
+          password: newPassword,
+        });
+
+      if (submitError) {
+        setApiError(mapClerkError(submitError));
+        return;
+      }
+
+      if (signIn.status === "complete") {
+        const { error: finalizeError } = await signIn.finalize();
+        if (finalizeError && finalizeError.code !== "session_exists") {
+          setApiError(mapClerkError(finalizeError));
+          return;
+        }
+        // session_exists = session auto-activated — treat as success
+        setPhase("done");
+      } else {
+        setPhase("done");
+      }
+    } catch (error) {
+      setApiError(mapClerkError(error));
     }
   }, [signIn, code, newPassword]);
 
@@ -170,9 +184,9 @@ export default function ForgotPassword() {
           </Text>
           <Pressable
             className="auth-button mt-8 w-full"
-            onPress={() => router.replace("/(auth)/sign-in")}
+            onPress={() => router.replace("/(tabs)" as Href)}
           >
-            <Text className="auth-button-text">Back to sign in</Text>
+            <Text className="auth-button-text">Continue to App</Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -221,8 +235,15 @@ export default function ForgotPassword() {
                   <View className="auth-field">
                     <Text className="auth-label">Reset code</Text>
                     <TextInput
-                      className={clsx("auth-input", codeError && "auth-input-error")}
-                      style={{ letterSpacing: 12, fontSize: 24, textAlign: "center" }}
+                      className={clsx(
+                        "auth-input",
+                        codeError && "auth-input-error",
+                      )}
+                      style={{
+                        letterSpacing: 12,
+                        fontSize: 24,
+                        textAlign: "center",
+                      }}
                       placeholder="______"
                       placeholderTextColor="rgba(0,0,0,0.25)"
                       keyboardType="number-pad"

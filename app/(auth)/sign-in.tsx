@@ -27,9 +27,13 @@ interface ClerkError {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-function mapClerkError(err: ClerkError | null): string {
-  if (!err) return "Something went wrong. Please try again.";
-  switch (err.code) {
+function mapClerkError(err: unknown): string {
+  if (err instanceof Error)
+    return err.message || "Something went wrong. Please try again.";
+  if (!err || typeof err !== "object")
+    return "Something went wrong. Please try again.";
+  const clerkError = err as ClerkError;
+  switch (clerkError.code) {
     case "form_password_incorrect":
       return "Incorrect password. Please try again.";
     case "form_identifier_not_found":
@@ -43,7 +47,9 @@ function mapClerkError(err: ClerkError | null): string {
     case "verification_expired":
       return "The code has expired. Please sign in again.";
     default:
-      return err.longMessage ?? err.message ?? "Something went wrong.";
+      return (
+        clerkError.longMessage ?? clerkError.message ?? "Something went wrong."
+      );
   }
 }
 
@@ -126,55 +132,59 @@ export default function SignIn() {
     setApiError("");
     if (!validateFields()) return;
 
-    const { error } = await signIn.password({
-      emailAddress: email.trim().toLowerCase(),
-      password,
-    });
+    try {
+      const { error } = await signIn.password({
+        emailAddress: email.trim().toLowerCase(),
+        password,
+      });
 
-    if (error) {
-      setApiError(mapClerkError(error));
-      return;
-    }
-
-    if (signIn.status === "complete") {
-      // No further verification required — finalize and navigate
-      const { error: finalizeError } = await signIn.finalize();
-      if (finalizeError && finalizeError.code !== "session_exists") {
-        setApiError(mapClerkError(finalizeError));
+      if (error) {
+        setApiError(mapClerkError(error));
         return;
       }
-      // session_exists is treated as success (session already active)
-      router.replace("/(tabs)" as any);
-      return;
-    }
 
-    if (signIn.status === "needs_second_factor") {
-      const supportsEmailCode = signIn.supportedSecondFactors?.some(
-        (factor) => factor.strategy === "email_code",
-      );
-      if (!supportsEmailCode) {
-        setApiError(
-          "This account requires a verification method that isn't supported here yet.",
+      if (signIn.status === "complete") {
+        // No further verification required — finalize and navigate
+        const { error: finalizeError } = await signIn.finalize();
+        if (finalizeError && finalizeError.code !== "session_exists") {
+          setApiError(mapClerkError(finalizeError));
+          return;
+        }
+        // session_exists is treated as success (session already active)
+        router.replace("/(tabs)" as any);
+        return;
+      }
+
+      if (signIn.status === "needs_second_factor") {
+        const supportsEmailCode = signIn.supportedSecondFactors?.some(
+          (factor) => factor.strategy === "email_code",
         );
+        if (!supportsEmailCode) {
+          setApiError(
+            "This account requires a verification method that isn't supported here yet.",
+          );
+          return;
+        }
+
+        // Second-factor email codes are not sent automatically — request one explicitly
+        const { error: sendError } = await signIn.mfa.sendEmailCode();
+        if (sendError) {
+          setApiError(mapClerkError(sendError));
+          return;
+        }
+
+        setCode("");
+        setCodeError("");
+        setPhase("otp");
         return;
       }
 
-      // Second-factor email codes are not sent automatically — request one explicitly
-      const { error: sendError } = await signIn.mfa.sendEmailCode();
-      if (sendError) {
-        setApiError(mapClerkError(sendError));
-        return;
-      }
-
-      setCode("");
-      setCodeError("");
-      setPhase("otp");
-      return;
+      setApiError(
+        "This account requires a verification method that isn't supported here yet.",
+      );
+    } catch (error) {
+      setApiError(mapClerkError(error));
     }
-
-    setApiError(
-      "This account requires a verification method that isn't supported here yet.",
-    );
   }, [signIn, email, password, validateFields, router]);
 
   // ── Submit Phase 2 — email code (second factor) ──────────────────────────
@@ -189,23 +199,27 @@ export default function SignIn() {
     }
     setCodeError("");
 
-    const { error } = await signIn.mfa.verifyEmailCode({
-      code: code.trim(),
-    });
+    try {
+      const { error } = await signIn.mfa.verifyEmailCode({
+        code: code.trim(),
+      });
 
-    if (error) {
+      if (error) {
+        setApiError(mapClerkError(error));
+        return;
+      }
+
+      // verifyEmailCode succeeded — finalize to activate the session
+      const { error: finalizeError } = await signIn.finalize();
+      if (finalizeError && finalizeError.code !== "session_exists") {
+        // session_exists means session was auto-activated by verifyCode — treat as success
+        setApiError(mapClerkError(finalizeError));
+        return;
+      }
+      router.replace("/(tabs)" as any);
+    } catch (error) {
       setApiError(mapClerkError(error));
-      return;
     }
-
-    // verifyEmailCode succeeded — finalize to activate the session
-    const { error: finalizeError } = await signIn.finalize();
-    if (finalizeError && finalizeError.code !== "session_exists") {
-      // session_exists means session was auto-activated by verifyCode — treat as success
-      setApiError(mapClerkError(finalizeError));
-      return;
-    }
-    router.replace("/(tabs)" as any);
   }, [signIn, code, router]);
 
   // ── Resend code ───────────────────────────────────────────────────────────
@@ -214,8 +228,12 @@ export default function SignIn() {
     if (!signIn || isLoading) return;
     setApiError("");
     setCodeError("");
-    const { error } = await signIn.mfa.sendEmailCode();
-    if (error) setApiError(mapClerkError(error));
+    try {
+      const { error } = await signIn.mfa.sendEmailCode();
+      if (error) setApiError(mapClerkError(error));
+    } catch (error) {
+      setApiError(mapClerkError(error));
+    }
   }, [signIn, isLoading]);
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -253,8 +271,15 @@ export default function SignIn() {
                   <View className="auth-field">
                     <Text className="auth-label">Verification code</Text>
                     <TextInput
-                      className={clsx("auth-input", codeError && "auth-input-error")}
-                      style={{ letterSpacing: 12, fontSize: 24, textAlign: "center" }}
+                      className={clsx(
+                        "auth-input",
+                        codeError && "auth-input-error",
+                      )}
+                      style={{
+                        letterSpacing: 12,
+                        fontSize: 24,
+                        textAlign: "center",
+                      }}
                       placeholder="______"
                       placeholderTextColor="rgba(0,0,0,0.25)"
                       keyboardType="number-pad"
@@ -269,7 +294,9 @@ export default function SignIn() {
                       textAlign="center"
                     />
                     {!!codeError && (
-                      <Text className="auth-error text-center">{codeError}</Text>
+                      <Text className="auth-error text-center">
+                        {codeError}
+                      </Text>
                     )}
                   </View>
 
@@ -367,7 +394,10 @@ export default function SignIn() {
                 <View className="auth-field">
                   <Text className="auth-label">Email</Text>
                   <TextInput
-                    className={clsx("auth-input", emailError && "auth-input-error")}
+                    className={clsx(
+                      "auth-input",
+                      emailError && "auth-input-error",
+                    )}
                     placeholder="you@example.com"
                     placeholderTextColor="rgba(0,0,0,0.35)"
                     autoCapitalize="none"
@@ -393,7 +423,10 @@ export default function SignIn() {
                   <Text className="auth-label">Password</Text>
                   <View className="relative">
                     <TextInput
-                      className={clsx("auth-input pr-12", passwordError && "auth-input-error")}
+                      className={clsx(
+                        "auth-input pr-12",
+                        passwordError && "auth-input-error",
+                      )}
                       placeholder="••••••••"
                       placeholderTextColor="rgba(0,0,0,0.35)"
                       secureTextEntry={!showPassword}

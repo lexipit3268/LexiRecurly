@@ -30,9 +30,13 @@ interface ClerkError {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function mapClerkError(err: ClerkError | null): string {
-  if (!err) return "Something went wrong. Please try again.";
-  switch (err.code) {
+function mapClerkError(err: unknown): string {
+  if (err instanceof Error)
+    return err.message || "Something went wrong. Please try again.";
+  if (!err || typeof err !== "object")
+    return "Something went wrong. Please try again.";
+  const clerkError = err as ClerkError;
+  switch (clerkError.code) {
     case "form_identifier_exists":
       return "An account with this email already exists.";
     case "form_password_pwned":
@@ -46,7 +50,9 @@ function mapClerkError(err: ClerkError | null): string {
     case "too_many_requests":
       return "Too many attempts. Please wait a moment.";
     default:
-      return err.longMessage ?? err.message ?? "Something went wrong.";
+      return (
+        clerkError.longMessage ?? clerkError.message ?? "Something went wrong."
+      );
   }
 }
 
@@ -167,16 +173,29 @@ export default function SignUp() {
   // ── Resend cooldown ───────────────────────────────────────────────────────
 
   const startResendCountdown = useCallback(() => {
+    // 1. Dọn sạch timer cũ nếu đang chạy
+    if (resendTimerRef.current) {
+      clearInterval(resendTimerRef.current);
+      resendTimerRef.current = null;
+    }
+
     setResendCountdown(RESEND_COOLDOWN_S);
-    resendTimerRef.current = setInterval(() => {
+
+    // 2. Lưu ID vào biến cục bộ để timer tự hủy đúng ID của nó
+    const timerId = setInterval(() => {
       setResendCountdown((prev) => {
         if (prev <= 1) {
-          clearInterval(resendTimerRef.current!);
+          clearInterval(timerId);
+          if (resendTimerRef.current === timerId) {
+            resendTimerRef.current = null;
+          }
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
+
+    resendTimerRef.current = timerId;
   }, []);
 
   // ── Submit — Phase 1 ─────────────────────────────────────────────────────
@@ -186,25 +205,29 @@ export default function SignUp() {
     setApiError("");
     if (!validateRegistration()) return;
 
-    const { error } = await signUp.password({
-      emailAddress: email.trim().toLowerCase(),
-      password,
-      firstName: firstName.trim(),
-    });
+    try {
+      const { error } = await signUp.password({
+        emailAddress: email.trim().toLowerCase(),
+        password,
+        firstName: firstName.trim(),
+      });
 
-    if (error) {
+      if (error) {
+        setApiError(mapClerkError(error));
+        return;
+      }
+
+      const { error: sendError } = await signUp.verifications.sendEmailCode();
+      if (sendError) {
+        setApiError(mapClerkError(sendError));
+        return;
+      }
+
+      startResendCountdown();
+      setPhase("verify");
+    } catch (error) {
       setApiError(mapClerkError(error));
-      return;
     }
-
-    const { error: sendError } = await signUp.verifications.sendEmailCode();
-    if (sendError) {
-      setApiError(mapClerkError(sendError));
-      return;
-    }
-
-    startResendCountdown();
-    setPhase("verify");
   }, [
     signUp,
     firstName,
@@ -226,23 +249,27 @@ export default function SignUp() {
     }
     setCodeError("");
 
-    const { error } = await signUp.verifications.verifyEmailCode({
-      code: code.trim(),
-    });
+    try {
+      const { error } = await signUp.verifications.verifyEmailCode({
+        code: code.trim(),
+      });
 
-    if (error) {
+      if (error) {
+        setApiError(mapClerkError(error));
+        return;
+      }
+
+      // verifyEmailCode succeeded — finalize to activate the session
+      const { error: finalizeError } = await signUp.finalize();
+      if (finalizeError && finalizeError.code !== "session_exists") {
+        setApiError(mapClerkError(finalizeError));
+        return;
+      }
+      // session_exists = session auto-activated — treat as success
+      router.replace("/(tabs)" as any);
+    } catch (error) {
       setApiError(mapClerkError(error));
-      return;
     }
-
-    // verifyEmailCode succeeded — finalize to activate the session
-    const { error: finalizeError } = await signUp.finalize();
-    if (finalizeError && finalizeError.code !== "session_exists") {
-      setApiError(mapClerkError(finalizeError));
-      return;
-    }
-    // session_exists = session auto-activated — treat as success
-    router.replace("/(tabs)" as any);
   }, [signUp, code, router]);
 
   // ── Resend code ───────────────────────────────────────────────────────────
@@ -252,13 +279,17 @@ export default function SignUp() {
     setApiError("");
     setCodeError("");
 
-    const { error } = await signUp.verifications.sendEmailCode();
-    if (error) {
-      setApiError(mapClerkError(error));
-      return;
-    }
+    try {
+      const { error } = await signUp.verifications.sendEmailCode();
+      if (error) {
+        setApiError(mapClerkError(error));
+        return;
+      }
 
-    startResendCountdown();
+      startResendCountdown();
+    } catch (error) {
+      setApiError(mapClerkError(error));
+    }
   }, [signUp, resendCountdown, isLoading, startResendCountdown]);
 
   // ── Render — Phase 2 (Verify) ─────────────────────────────────────────────
@@ -295,8 +326,15 @@ export default function SignUp() {
                   <View className="auth-field">
                     <Text className="auth-label">Verification code</Text>
                     <TextInput
-                      className={clsx("auth-input", codeError && "auth-input-error")}
-                      style={{ letterSpacing: 12, fontSize: 24, textAlign: "center" }}
+                      className={clsx(
+                        "auth-input",
+                        codeError && "auth-input-error",
+                      )}
+                      style={{
+                        letterSpacing: 12,
+                        fontSize: 24,
+                        textAlign: "center",
+                      }}
                       placeholder="______"
                       placeholderTextColor="rgba(0,0,0,0.25)"
                       keyboardType="number-pad"
@@ -365,11 +403,21 @@ export default function SignUp() {
               <View className="auth-link-row">
                 <Pressable
                   onPress={async () => {
-                    if (signUp) await signUp.reset();
-                    setPhase("register");
-                    setCode("");
-                    setCodeError("");
-                    setApiError("");
+                    try {
+                      if (resendTimerRef.current) {
+                        clearInterval(resendTimerRef.current);
+                        resendTimerRef.current = null;
+                      }
+                      setResendCountdown(0);
+
+                      if (signUp) await signUp.reset();
+                      setPhase("register");
+                      setCode("");
+                      setCodeError("");
+                      setApiError("");
+                    } catch (error) {
+                      setApiError(mapClerkError(error));
+                    }
                   }}
                   hitSlop={8}
                 >

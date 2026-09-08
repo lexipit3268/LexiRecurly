@@ -3,6 +3,7 @@ import { useClerk, useUser } from "@clerk/expo";
 import { Ionicons } from "@expo/vector-icons";
 import { clsx } from "clsx";
 import { useRouter } from "expo-router";
+import { styled } from "nativewind";
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
@@ -13,7 +14,6 @@ import {
   Text,
   View,
 } from "react-native";
-import { styled } from "nativewind";
 import { SafeAreaView as RNSafeAreaView } from "react-native-safe-area-context";
 const SafeAreaView = styled(RNSafeAreaView);
 
@@ -36,9 +36,18 @@ export default function Settings() {
         text: "Sign out",
         style: "destructive",
         onPress: async () => {
-          setIsSigningOut(true);
-          await signOut();
-          router.replace("/(auth)/sign-in" as any);
+          try {
+            setIsSigningOut(true);
+            await signOut();
+            router.replace("/(auth)/sign-in" as any);
+          } catch (error) {
+            Alert.alert(
+              "Sign out failed",
+              "Could not sign out. Please check your network and try again.",
+            );
+          } finally {
+            setIsSigningOut(false);
+          }
         },
       },
     ]);
@@ -85,11 +94,7 @@ export default function Settings() {
           <View className="settings-info-card">
             <View className="settings-info-row">
               <View className="settings-info-icon">
-                <Ionicons
-                  name="person-outline"
-                  size={18}
-                  color="#081126"
-                />
+                <Ionicons name="person-outline" size={18} color="#081126" />
               </View>
               <View className="settings-info-copy">
                 <Text className="settings-info-label">Full name</Text>
@@ -113,11 +118,7 @@ export default function Settings() {
 
             <View className="settings-info-row">
               <View className="settings-info-icon">
-                <Ionicons
-                  name="calendar-outline"
-                  size={18}
-                  color="#081126"
-                />
+                <Ionicons name="calendar-outline" size={18} color="#081126" />
               </View>
               <View className="settings-info-copy">
                 <Text className="settings-info-label">Member since</Text>
