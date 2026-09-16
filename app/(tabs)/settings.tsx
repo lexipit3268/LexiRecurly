@@ -15,10 +15,12 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView as RNSafeAreaView } from "react-native-safe-area-context";
+import { usePostHog } from "posthog-react-native";
 const SafeAreaView = styled(RNSafeAreaView);
 
 export default function Settings() {
   const router = useRouter();
+  const posthog = usePostHog();
   const { user } = useUser();
   const { signOut } = useClerk();
   const [isSigningOut, setIsSigningOut] = useState(false);
@@ -38,6 +40,7 @@ export default function Settings() {
         onPress: async () => {
           try {
             setIsSigningOut(true);
+            posthog.capture("sign_out_requested");
             await signOut();
             router.replace("/(auth)/sign-in" as any);
           } catch (error) {
@@ -51,7 +54,7 @@ export default function Settings() {
         },
       },
     ]);
-  }, [signOut, router]);
+  }, [signOut, router, posthog]);
 
   return (
     <SafeAreaView className="flex-1 bg-background p-5">

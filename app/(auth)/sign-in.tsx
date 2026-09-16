@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { usePostHog } from "posthog-react-native";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -77,6 +78,7 @@ type Phase = "credentials" | "otp";
 
 export default function SignIn() {
   const router = useRouter();
+  const posthog = usePostHog();
   const { signIn, fetchStatus } = useSignIn();
 
   // ── Phase 1 state ─────────────────────────────────────────────────────────
@@ -151,6 +153,7 @@ export default function SignIn() {
           return;
         }
         // session_exists is treated as success (session already active)
+        posthog.capture("sign_in_completed");
         router.replace("/(tabs)" as any);
         return;
       }
@@ -185,7 +188,7 @@ export default function SignIn() {
     } catch (error) {
       setApiError(mapClerkError(error));
     }
-  }, [signIn, email, password, validateFields, router]);
+  }, [signIn, email, password, validateFields, router, posthog]);
 
   // ── Submit Phase 2 — email code (second factor) ──────────────────────────
 
@@ -216,11 +219,12 @@ export default function SignIn() {
         setApiError(mapClerkError(finalizeError));
         return;
       }
+      posthog.capture("sign_in_completed");
       router.replace("/(tabs)" as any);
     } catch (error) {
       setApiError(mapClerkError(error));
     }
-  }, [signIn, code, router]);
+  }, [signIn, code, router, posthog]);
 
   // ── Resend code ───────────────────────────────────────────────────────────
 

@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { usePostHog } from "posthog-react-native";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -51,6 +52,7 @@ type Phase = "request" | "reset" | "done";
 
 export default function ForgotPassword() {
   const router = useRouter();
+  const posthog = usePostHog();
   const { signIn, fetchStatus } = useSignIn();
 
   const [phase, setPhase] = useState<Phase>("request");
@@ -100,11 +102,12 @@ export default function ForgotPassword() {
         return;
       }
 
+      posthog.capture("password_reset_requested");
       setPhase("reset");
     } catch (error) {
       setApiError(mapClerkError(error));
     }
-  }, [signIn, email]);
+  }, [signIn, email, posthog]);
 
   // ── Step 2: Verify code + set new password ─────────────────────────────────
 
@@ -157,14 +160,16 @@ export default function ForgotPassword() {
           return;
         }
         // session_exists = session auto-activated — treat as success
+        posthog.capture("password_reset_completed");
         setPhase("done");
       } else {
+        posthog.capture("password_reset_completed");
         setPhase("done");
       }
     } catch (error) {
       setApiError(mapClerkError(error));
     }
-  }, [signIn, code, newPassword]);
+  }, [signIn, code, newPassword, posthog]);
 
   // ── Render: Done ───────────────────────────────────────────────────────────
 

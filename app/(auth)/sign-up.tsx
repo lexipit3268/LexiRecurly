@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { usePostHog } from "posthog-react-native";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -90,6 +91,7 @@ type Phase = "register" | "verify";
 
 export default function SignUp() {
   const router = useRouter();
+  const posthog = usePostHog();
   const { signUp, fetchStatus } = useSignUp();
 
   // ── Phase 1 — Registration ────────────────────────────────────────────────
@@ -266,11 +268,12 @@ export default function SignUp() {
         return;
       }
       // session_exists = session auto-activated — treat as success
+      posthog.capture("account_registered");
       router.replace("/(tabs)" as any);
     } catch (error) {
       setApiError(mapClerkError(error));
     }
-  }, [signUp, code, router]);
+  }, [signUp, code, router, posthog]);
 
   // ── Resend code ───────────────────────────────────────────────────────────
 
